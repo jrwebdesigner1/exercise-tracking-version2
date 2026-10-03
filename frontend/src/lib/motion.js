@@ -4,6 +4,17 @@ const LANDMARKS = {
 };
 const TRACKING_GAP_MS = 300;
 const STABLE_GRACE_MS = 250;
+const TARGET_GRACE_MS = 350;
+const MAX_SAMPLES = 2400;
+
+function recordSample(samples, sample) {
+  // Preserve the whole session when a slow patient needs more time than 2400 frames.
+  // Older frames are thinned; recent frames keep the detail needed to count a rep.
+  const history = samples.length >= MAX_SAMPLES
+    ? samples.filter((_, index) => index === 0 || index % 2 === 1)
+    : samples;
+  return [...history, sample];
+}
 
 export const POSE_EDGES = [
   [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
@@ -120,7 +131,7 @@ export function jointProgress(exercise, angles, name) {
 export function newTracker(exercise) {
   return {
     exercise, phase: "calibrating", reps: 0, baselineFrames: [], baseline: null,
-    baselineScale: null, startedAt: null, targetAt: null, lastTargetAt: null, startSeen: false,
+    baselineScale: null, startedAt: null, targetAt: null, lastTargetAt: null, targetLostAt: null, startSeen: false,
     angles: {}, samples: [], lastTimeMs: 0, lastValidAt: null, lostAt: null,
     unstableAt: null, trackingVisible: false, message: "Hold your start position in view.",
   };
@@ -132,10 +143,9 @@ export function advanceTracker(state, measurement, timeMs) {
   const active = required.filter(name => state.exercise.roles[name] === "active");
   const stable = required.filter(name => state.exercise.roles[name] === "stable");
   if (state.reps >= state.exercise.reps) return { ...next, phase: "complete", message: "Exercise complete. Save your session." };
-  if (state.samples.length >= 2400) return { ...next, phase: "paused", message: "Session limit reached. End and save your session." };
 
   if (!measurement.valid) {
-    if (next.baseline && next.samples.length < 2400) next.samples = [...next.samples, { timeMs, visible: false, angles: {} }];
+    if (next.baseline) next.samples = recordSample(next.samples, { timeMs, visible: false, angles: {} });
     next.trackingVisible = false;
     next.lostAt ??= timeMs;
     if (!next.baseline || next.lastValidAt === null || timeMs - next.lastValidAt > TRACKING_GAP_MS) {
@@ -144,6 +154,7 @@ export function advanceTracker(state, measurement, timeMs) {
       next.startedAt = null;
       next.targetAt = null;
       next.lastTargetAt = null;
+      next.targetLostAt = null;
       next.startSeen = false;
       next.unstableAt = null;
       next.baselineFrames = [];
@@ -159,6 +170,7 @@ export function advanceTracker(state, measurement, timeMs) {
       next.startedAt = null;
       next.targetAt = null;
       next.lastTargetAt = null;
+      next.targetLostAt = null;
       next.startSeen = false;
       next.unstableAt = null;
     } else if (next.targetAt !== null) {
@@ -188,7 +200,7 @@ export function advanceTracker(state, measurement, timeMs) {
     next.phase = "ready";
     next.startSeen = true;
     next.angles = Object.fromEntries(required.map(name => [name, 0]));
-    if (next.samples.length < 2400) next.samples = [...next.samples, { timeMs, visible: true, angles: next.angles }];
+    next.samples = recordSample(next.samples, { timeMs, visible: true, angles: next.angles });
     next.message = "Ready. Move gently toward the green target.";
     return next;
   }
@@ -201,21 +213,27 @@ export function advanceTracker(state, measurement, timeMs) {
     next.startSeen = false;
     next.unstableAt = null;
     next.message = scaleRatio < .65 ? "Move a little closer to the camera." : "Move a little farther from the camera.";
-    if (next.samples.length < 2400) next.samples = [...next.samples, { timeMs, visible: false, angles: {} }];
+    next.samples = recordSample(next.samples, { timeMs, visible: false, angles: {} });
     return next;
   }
 
   const angles = Object.fromEntries(required.map(name => [name, Math.round((measurement.angles[name] - next.baseline[name]) * 10) / 10]));
   next.angles = angles;
-  if (next.samples.length < 2400) next.samples = [...next.samples, { timeMs, visible: true, angles }];
+  next.samples = recordSample(next.samples, { timeMs, visible: true, angles });
   const progress = Object.fromEntries(active.map(name => [name, jointProgress(state.exercise, angles, name)]));
   const startFrame = state.exercise.frames[0]?.angles || {};
   const returnFrame = state.exercise.frames[2]?.angles || startFrame;
-  const startLimit = Math.max(5, Math.min(12, state.exercise.rules.tolerance));
+  const startLimit = Math.max(12, Math.min(15, state.exercise.rules.tolerance));
+  const departureLimit = Math.max(5, Math.min(12, state.exercise.rules.tolerance));
+  const returnLimit = Math.max(5, Math.min(12, state.exercise.rules.tolerance));
   const towardTarget = name => progress[name].progress;
   const atStart = active.every(name => Math.abs(angles[name]) <= startLimit);
-  const atReturn = active.every(name => Math.abs(angles[name] - ((returnFrame[name] ?? startFrame[name] ?? 0) - (startFrame[name] ?? 0))) <= startLimit);
+  const atReturn = active.every(name => {
+    const returnOffset = (returnFrame[name] ?? startFrame[name] ?? 0) - (startFrame[name] ?? 0);
+    return Math.abs(angles[name] - returnOffset) <= (Math.abs(returnOffset) < 1 ? startLimit : returnLimit);
+  });
   const atTarget = active.every(name => progress[name].atTarget);
+  const nearTarget = active.every(name => progress[name].progress >= progress[name].lower - 5 && progress[name].progress <= progress[name].upper + 5);
   const steady = stable.every(name => Math.abs(angles[name]) <= state.exercise.rules.stable);
 
   if (steady && next.unstableAt !== null) {
@@ -230,6 +248,7 @@ export function advanceTracker(state, measurement, timeMs) {
       next.startedAt = null;
       next.targetAt = null;
       next.lastTargetAt = null;
+      next.targetLostAt = null;
       next.startSeen = false;
     }
     next.message = "Keep the supporting joint steady.";
@@ -240,7 +259,7 @@ export function advanceTracker(state, measurement, timeMs) {
   } else if (next.phase === "ready") {
     if (atStart) next.startSeen = true;
     next.message = next.startSeen ? "Move gently toward the green target." : "Return to your start position first.";
-    if (next.startSeen && !atStart && active.some(name => towardTarget(name) > startLimit)) {
+    if (next.startSeen && active.some(name => towardTarget(name) > departureLimit)) {
       next.phase = "moving"; next.startedAt = timeMs;
     }
   } else if (next.startedAt !== null && timeMs - next.startedAt > (state.exercise.rules.maxTime * 2 + state.exercise.hold) * 1000) {
@@ -252,9 +271,11 @@ export function advanceTracker(state, measurement, timeMs) {
   } else if (next.phase === "moving") {
     next.message = active.some(name => towardTarget(name) > progress[name].upper)
       ? "Move back into the green target range." : state.exercise.rules.feedback || "Move a little further.";
-    if (atTarget) { next.phase = "target"; next.targetAt = timeMs; next.lastTargetAt = timeMs; next.message = "Good. Hold this position."; }
+    if (atTarget) { next.phase = "target"; next.targetAt = timeMs; next.lastTargetAt = timeMs; next.targetLostAt = null; next.message = state.exercise.hold ? "Good. Hold this position." : "Target reached. Return to start."; }
   } else if (next.phase === "target") {
     if (atTarget) {
+      if (next.targetLostAt !== null) next.targetAt += timeMs - next.targetLostAt;
+      next.targetLostAt = null;
       next.lastTargetAt = timeMs;
       if (timeMs - next.targetAt >= state.exercise.hold * 1000) { next.phase = "returning"; next.message = "Return slowly to the start."; }
     } else if ((next.lastTargetAt ?? next.targetAt) - next.targetAt >= Math.max(0, state.exercise.hold * 1000 - 150)) {
@@ -272,7 +293,9 @@ export function advanceTracker(state, measurement, timeMs) {
     } else if (atStart) {
       next.phase = "ready"; next.startedAt = null; next.targetAt = null; next.lastTargetAt = null; next.message = "Reach the target before returning.";
     } else {
-      next.phase = "moving"; next.targetAt = null; next.lastTargetAt = null; next.message = "Hold the target position a little longer.";
+      next.targetLostAt ??= timeMs;
+      if (nearTarget && timeMs - next.targetLostAt <= TARGET_GRACE_MS) next.message = "Stay near the target.";
+      else { next.phase = "moving"; next.targetAt = null; next.lastTargetAt = null; next.targetLostAt = null; next.message = "Hold the target position a little longer."; }
     }
   } else if (next.phase === "returning" && atReturn) {
     if (timeMs - next.startedAt >= state.exercise.rules.minTime * 1000) { next.reps += 1; next.message = "Nice work. One repetition complete."; }

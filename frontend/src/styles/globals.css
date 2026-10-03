@@ -140,6 +140,7 @@
 /* Patient live movement view */
 .patient-portal .tracking-layout{grid-template-columns:minmax(0,1.65fr) minmax(300px,.72fr);align-items:start;gap:16px}
 .tracking-main{min-width:0}
+.tracking-mobile-actions,.tracking-mobile-error{display:none}
 .tracking-steps{display:flex;align-items:center;gap:4px;margin:0 0 12px;padding:8px;background:#f0f6ff;border:1px solid #dceaff;border-radius:16px;overflow-x:auto}
 .tracking-step{display:flex;align-items:center;justify-content:center;gap:8px;min-width:max-content;flex:1;padding:7px 10px;border-radius:11px;color:#6984a8;font-size:11px}
 .tracking-step span{display:grid;place-items:center;flex:none;width:27px;height:27px;background:#dce7f5;border-radius:50%;color:#254263;font-size:14px;font-weight:800}
@@ -165,6 +166,14 @@
 .tracking-hold span{font-size:11px;color:#617e9e}
 .tracking-hold-meter{width:110px;height:9px;flex:none;overflow:hidden;border-radius:10px;background:#dbe9f7}
 .tracking-hold-meter i{display:block;height:100%;border-radius:10px;background:#19c579;transition:width .12s linear}
+.tracking-motion-guide{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
+.tracking-motion-joint{display:grid;grid-template-columns:1fr auto;gap:5px 10px;min-width:145px;flex:1;padding:9px 11px;border:1px solid #d9e9fb;border-radius:11px;background:#fff;color:#224463}
+.tracking-motion-joint strong,.tracking-motion-joint span{font-size:11px}
+.tracking-motion-joint span{color:#617e9e}
+.tracking-motion-joint.reached span{color:#087a4c;font-weight:700}
+.tracking-motion-joint>i{grid-column:1/-1;height:5px;border-radius:8px;background:#e8f0fa;overflow:hidden}
+.tracking-motion-joint>i b{display:block;height:100%;border-radius:8px;background:#ff9a28;transition:width .18s ease}
+.tracking-motion-joint.reached>i b{background:#19c579}
 .tracking-feedback-card{display:flex;align-items:flex-start;gap:10px;min-width:0;padding:13px;border-radius:13px;background:#fff3ef;color:#b3411b}
 .tracking-feedback-card.calm{background:#eaf4ff;color:#176cb9}
 .tracking-feedback-card.success{background:#e8faf1;color:#087a4c}
@@ -196,3 +205,16 @@
 @media(max-width:900px){.patient-portal .tracking-layout{grid-template-columns:1fr}.patient-portal .tracking-camera{height:clamp(420px,62vw,580px)}.patient-portal .tracking-movements{display:none}}
 @media(max-width:640px){.tracking-steps{gap:2px;padding:6px}.tracking-step{padding:6px 8px}.tracking-step strong{font-size:10px}.tracking-step span{width:24px;height:24px;font-size:12px}.patient-portal .tracking-camera{height:clamp(360px,64dvh,520px)}.tracking-live-badge{top:10px;left:10px;font-size:11px;padding:7px 9px}.tracking-camera-reps{top:10px;right:10px;min-width:58px;padding:7px}.tracking-camera-reps strong{font-size:18px}.tracking-camera-guide{bottom:10px;left:10px;right:10px;max-width:none;font-size:11px}.tracking-feedback-row{gap:8px}.tracking-feedback-card{padding:10px;gap:7px}.tracking-feedback-icon{width:25px;height:25px}.tracking-feedback-card strong{font-size:11px}.tracking-feedback-card div>span{font-size:10px}.patient-portal .tracking-count{display:flex}.patient-portal .tracking-panel{padding:16px}.patient-portal .tracking-movements{display:none}.tracking-hold-meter{width:82px}}
 @media(max-width:420px){.tracking-step strong{display:none}.tracking-step{min-width:0}.tracking-feedback-row{grid-template-columns:1fr}}
+@media(max-width:640px){
+  .patient-portal:has(.tracking-layout) .app-content{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
+  .patient-portal .tracking-camera{height:clamp(290px,48dvh,430px)}
+  .tracking-mobile-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;position:fixed;z-index:30;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:#fffffff5;box-shadow:0 -8px 26px #193e7024;border-top:1px solid #dfebf8;backdrop-filter:blur(12px)}
+  .tracking-mobile-actions>.button{min-width:0;min-height:44px;padding:0 8px;font-size:12px}
+  .tracking-mobile-actions>.button:only-child{grid-column:1/-1}
+  .patient-portal .tracking-panel .tracking-actions,.patient-portal .tracking-panel>.button{display:none}
+  .tracking-mobile-error{display:block;position:fixed;z-index:31;left:16px;right:16px;bottom:calc(68px + env(safe-area-inset-bottom));margin:0;padding:10px 12px;border-radius:10px;background:#fff2ee;box-shadow:0 4px 20px #55251530}
+  .tracking-steps{gap:3px}
+  .tracking-step{transition:background .2s ease,color .2s ease,flex .2s ease}
+  .tracking-step.current{flex:2}
+  .tracking-step.current strong{display:block;white-space:normal;line-height:1.1}
+}

@@ -11,6 +11,14 @@ const JOINT_POINTS = {
 };
 const FOCUS_POINTS = { shoulder: "elbow", elbow: "wrist", wrist: "wrist", hip: "knee", knee: "ankle", ankle: "ankle" };
 const pointVisible = point => point && Number.isFinite(point.x) && Number.isFinite(point.y) && (point.visibility ?? 1) >= .55;
+function backAtStart(exercise, angles, name) {
+  if (angles?.[name] == null) return false;
+  const start = exercise.frames[0]?.angles[name] ?? 0;
+  const end = exercise.frames[2]?.angles[name] ?? start;
+  const offset = end - start;
+  const limit = Math.abs(offset) < 1 ? Math.max(12, Math.min(15, exercise.rules.tolerance)) : Math.max(5, Math.min(12, exercise.rules.tolerance));
+  return Math.abs(angles[name] - offset) <= limit;
+}
 
 function drawPose(canvas, measurement, exercise, state) {
   if (!canvas) return;
@@ -76,7 +84,7 @@ function drawPose(canvas, measurement, exercise, state) {
       }
     }
     const movement = jointProgress(exercise, state.angles, name);
-    const reached = state.trackingVisible && ["target", "returning"].includes(state.phase) && state.baseline && steady && movement.atTarget;
+    const reached = state.trackingVisible && state.baseline && steady && (state.phase === "returning" ? backAtStart(exercise, state.angles, name) : ["target", "ready"].includes(state.phase) && (state.phase === "ready" ? backAtStart(exercise, state.angles, name) : movement.atTarget));
     circle(point, 21, "rgba(37, 99, 235, .12)", reached ? "#18cb7d" : "#3b93ff", 2);
     if (state.baseline && state.phase !== "paused") {
       context.beginPath();
@@ -109,14 +117,14 @@ export default function LiveTracking({ exercise, mutate, onDone }) {
   const [result, setResult] = useState(null);
   const activeJoints = Object.entries(exercise.roles).filter(([, role]) => role === "active").map(([name]) => name);
   const stableJoints = Object.entries(exercise.roles).filter(([, role]) => role === "stable").map(([name]) => name);
-  const movements = activeJoints.map(name => jointProgress(exercise, snapshot.trackingVisible ? snapshot.angles : {}, name));
+  const movements = activeJoints.map(name => ({ ...jointProgress(exercise, snapshot.trackingVisible ? snapshot.angles : {}, name), atReturn: snapshot.trackingVisible && backAtStart(exercise, snapshot.angles, name) }));
   const stableGood = snapshot.trackingVisible && stableJoints.every(name => snapshot.angles[name] != null && Math.abs(snapshot.angles[name]) <= exercise.rules.stable);
   const targetPhase = ["target", "returning"].includes(snapshot.phase);
   const inTarget = targetPhase && movements.length > 0 && stableGood && movements.every(movement => movement.atTarget);
   const targetText = activeJoints.map(label).join(" and ") || "Moving joints";
-  const stageNumber = snapshot.phase === "calibrating" || snapshot.phase === "paused" ? 1 : snapshot.phase === "target" ? 3 : snapshot.phase === "returning" ? 4 : 2;
-  const trackingGood = stage === "tracking" && snapshot.trackingVisible && snapshot.phase !== "calibrating" && snapshot.phase !== "paused";
   const holdMs = Math.max(0, Number(exercise.hold) * 1000);
+  const stageNumber = ["calibrating", "paused", "ready"].includes(snapshot.phase) ? 1 : snapshot.phase === "moving" ? 2 : snapshot.phase === "target" ? (holdMs > 0 ? 3 : 4) : 4;
+  const trackingGood = stage === "tracking" && snapshot.trackingVisible && snapshot.phase !== "calibrating" && snapshot.phase !== "paused";
   const holdClock = Math.min(snapshot.trackingVisible ? snapshot.lastTimeMs : snapshot.lastValidAt ?? 0, snapshot.unstableAt ?? Infinity);
   const holdElapsedMs = snapshot.phase === "returning" ? holdMs : snapshot.phase === "target" && snapshot.targetAt != null ? Math.max(0, holdClock - snapshot.targetAt) : 0;
   const holdPercent = holdMs === 0 ? 100 : Math.min(100, holdElapsedMs / holdMs * 100);
@@ -233,7 +241,7 @@ export default function LiveTracking({ exercise, mutate, onDone }) {
     setBusy(true);
     setError("");
     try {
-      const saved = await mutate("/sessions", { method: "POST", body: { exerciseId: exercise.id, samples } }, "Session saved");
+      const saved = await mutate("/sessions", { method: "POST", body: { exerciseId: exercise.id, samples: samples.map(({ timeMs, visible, angles }) => ({ timeMs, visible, angles })) } }, "Session saved");
       stop();
       setResult(saved);
       setStage("complete");
@@ -245,11 +253,16 @@ export default function LiveTracking({ exercise, mutate, onDone }) {
 
   return <div className="tracking-layout">
     <div className="tracking-main">
-      <div className="tracking-steps" aria-label="Exercise steps">{["Align body", "Follow target points", "Hold position", "Return"].map((item, index) => <div key={item} className={`tracking-step ${index + 1 === stageNumber ? "current" : ""} ${index + 1 < stageNumber ? "done" : ""}`}><span>{index + 1}</span><strong>{item}</strong></div>)}</div>
+      <div className="tracking-steps" aria-label="Exercise steps">{["Set start", "Reach target", holdMs > 0 ? "Hold" : "Target reached", "Return"].map((item, index) => <div key={item} className={`tracking-step ${index + 1 === stageNumber ? "current" : ""} ${index + 1 < stageNumber ? "done" : ""}`}><span>{index + 1}</span><strong>{item}</strong></div>)}</div>
       <div className="tracking-camera">
         {stage === "tracking" ? <><video ref={video} autoPlay playsInline muted/><canvas ref={overlay}/><div className={`tracking-live-badge ${trackingGood ? "good" : "waiting"}`}><i/>{trackingGood ? "Your live tracking" : snapshot.phase === "paused" ? "Tracking paused" : "Finding your position"}</div><div className="tracking-camera-reps"><strong>{snapshot.reps}/{exercise.reps}</strong><span>Reps</span></div><div className="tracking-camera-guide"><ScanLine size={15}/>{snapshot.message}</div></> : <div className="tracking-camera-empty"><Camera size={35}/><strong>{stage === "loading" ? "Preparing movement tracking…" : "Ready when you are"}</strong><span>{stage === "loading" ? "Loading body and hand detection" : `Place your camera for the ${exercise.camera.toLowerCase()} view. Video is not saved.`}</span></div>}
       </div>
-      {stage === "tracking" && <div className={`tracking-hold ${snapshot.phase === "target" || snapshot.phase === "returning" ? "active" : ""}`}><div><strong>{snapshot.phase === "returning" ? "Hold complete — return to start" : snapshot.phase === "target" ? "Hold the green points" : "Reach the green points"}</strong><span>{snapshot.phase === "target" ? `${Math.max(0, (holdMs - holdElapsedMs) / 1000).toFixed(1)}s remaining` : snapshot.phase === "returning" ? "Return to finish this rep" : "Hold, then return to count a rep"}</span></div><div className="tracking-hold-meter" role="progressbar" aria-label="Target hold" aria-valuenow={Math.round(holdPercent)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${holdPercent}%` }}/></div></div>}
+      <div className="tracking-mobile-actions">
+        {stage === "tracking" ? <><Button tone="secondary" disabled={busy || snapshot.phase === "complete"} onClick={recalibrate}><RotateCcw size={16}/> Recalibrate</Button><Button disabled={busy || !snapshot.baseline || snapshot.samples.length < 5} onClick={() => finish()}><Square size={15}/> {busy ? "Saving…" : "End & save"}</Button></> : <Button disabled={busy} onClick={begin}><Camera size={17}/> {busy ? "Preparing…" : "Enable camera"}</Button>}
+      </div>
+      {error && <p className="form-error tracking-mobile-error" role="alert">{error}</p>}
+      {stage === "tracking" && <div className={`tracking-hold ${snapshot.phase === "target" || snapshot.phase === "returning" ? "active" : ""}`}><div><strong>{snapshot.phase === "returning" ? "Return to your start position" : snapshot.phase === "target" ? (holdMs ? "Hold near the target" : "Target reached") : snapshot.phase === "moving" ? "Move toward the target" : "Set your start position"}</strong><span>{snapshot.phase === "target" ? (holdMs ? `${Math.max(0, (holdMs - holdElapsedMs) / 1000).toFixed(1)}s remaining` : "Return to finish this rep") : snapshot.phase === "returning" ? "A rep counts when you return" : snapshot.phase === "moving" ? "Move gently until your target joints turn green" : "Hold still to calibrate, then move"}</span></div>{holdMs > 0 && <div className="tracking-hold-meter" role="progressbar" aria-label="Target hold" aria-valuenow={Math.round(holdPercent)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${holdPercent}%` }}/></div>}</div>}
+      {stage === "tracking" && snapshot.baseline && <div className="tracking-motion-guide" aria-label="Movement progress">{movements.map(movement => <div key={movement.name} className={`tracking-motion-joint ${snapshot.phase === "returning" ? movement.atReturn ? "reached" : "" : movement.atTarget ? "reached" : ""}`}><strong>{label(movement.name)}</strong><span>{snapshot.phase === "returning" ? movement.atReturn ? "At start" : "Return to start" : movement.atTarget ? "Target reached" : movement.progress == null ? "Finding joint" : `${Math.round(movement.progress)}° / ${Math.round(movement.goal)}°`}</span><i><b style={{ width: `${snapshot.phase === "returning" ? movement.atReturn ? 100 : Math.max(0, 100 - movement.percent) : movement.percent}%` }}/></i></div>)}</div>}
       <div className="tracking-feedback-row"><div className={`tracking-feedback-card ${inTarget ? "success" : "action"}`}><span className="tracking-feedback-icon"><MoveUp size={19}/></span><div><strong>{snapshot.phase === "returning" ? "Return to start" : inTarget ? "Target reached" : snapshot.phase === "calibrating" ? "Align your body" : snapshot.phase === "paused" ? "Tracking needs attention" : "Follow the target"}</strong><span>{stage === "tracking" ? snapshot.message : "Enable the camera and stand in view."}</span></div></div><div className="tracking-feedback-card calm"><span className="tracking-feedback-icon"><Target size={19}/></span><div><strong>{stableJoints.length ? "Keep supporting joints steady" : "Move with control"}</strong><span>{stableJoints.length ? stableJoints.map(label).join(" · ") : exercise.instruction}</span></div></div></div>
     </div>
     <div className="tracking-panel">
@@ -261,12 +274,12 @@ export default function LiveTracking({ exercise, mutate, onDone }) {
         return <div className="tracking-target" key={movement.name}><div className="tracking-target-heading"><strong>{label(movement.name)}</strong><span className={targetPhase && movement.atTarget && stableGood ? "target-met" : ""}>{targetPhase && movement.atTarget && stableGood ? "In target" : movement.progress == null ? "Finding movement" : `${Math.round(movement.progress)}° toward target`}</span></div><div className="tracking-target-scale"><div className="tracking-target-green" style={{ left: `${movement.lower / scale * 100}%`, width: `${(movement.upper - movement.lower) / scale * 100}%` }}/>{movement.progress != null && <div className="tracking-target-marker" style={{ left: `${Math.max(0, Math.min(100, movement.progress / scale * 100))}%` }}/>}</div><div className="tracking-target-labels"><span>Start 0°</span><strong>Target {Math.round(movement.lower)}°–{Math.round(movement.upper)}°</strong></div></div>;
       })}</div>
       <div className="tracking-progress"><div style={{ width: `${Math.min(100, snapshot.reps / exercise.reps * 100)}%` }}/></div>
-      <div className="tracking-points"><h3>Target points</h3>{movements.map(movement => <div key={movement.name} className="tracking-point-row"><i className={targetPhase && movement.atTarget && stableGood ? "stable" : "active"}/><div><strong>{label(movement.name)}</strong><span>{targetPhase && movement.atTarget && stableGood ? "Target reached" : "Move until this point turns green"}</span></div></div>)}{stableJoints.map(name => {
+      <div className="tracking-points"><h3>{snapshot.phase === "returning" ? "Return points" : "Target points"}</h3>{movements.map(movement => <div key={movement.name} className="tracking-point-row"><i className={(snapshot.phase === "returning" ? movement.atReturn : targetPhase && movement.atTarget) && stableGood ? "stable" : "active"}/><div><strong>{label(movement.name)}</strong><span>{snapshot.phase === "returning" ? movement.atReturn ? "Back at start" : "Move back to your starting pose" : targetPhase && movement.atTarget && stableGood ? "Target reached" : "Move until this point turns green"}</span></div></div>)}{stableJoints.map(name => {
         const steady = snapshot.trackingVisible && snapshot.angles[name] != null && Math.abs(snapshot.angles[name]) <= exercise.rules.stable;
         return <div key={name} className="tracking-point-row"><i className={steady ? "stable" : "active"}/><div><strong>{label(name)}</strong><span>{steady ? "Keeping steady" : "Keep steady while you move"}</span></div></div>;
       })}<div className="tracking-point-row"><i className={trackingGood ? "stable" : "active"}/><div><strong>Body position</strong><span>{trackingGood ? "Centered and in view" : "Stay centered and in view"}</span></div></div></div>
       <p className="tracking-hint">{exercise.instruction}</p>
-      {stage === "tracking" ? <div className="tracking-actions"><Button tone="secondary" disabled={snapshot.phase === "complete"} onClick={recalibrate}><RotateCcw size={16}/> Recalibrate</Button><Button disabled={busy || !snapshot.baseline || snapshot.samples.length < 5} onClick={finish}><Square size={15}/> {busy ? "Saving…" : snapshot.phase === "complete" ? "Save session" : "End & save"}</Button></div> : <Button disabled={busy} onClick={begin}><Camera size={17}/> {busy ? "Preparing…" : "Enable camera"}</Button>}
+      {stage === "tracking" ? <div className="tracking-actions"><Button tone="secondary" disabled={busy || snapshot.phase === "complete"} onClick={recalibrate}><RotateCcw size={16}/> Recalibrate</Button><Button disabled={busy || !snapshot.baseline || snapshot.samples.length < 5} onClick={() => finish()}><Square size={15}/> {busy ? "Saving…" : snapshot.phase === "complete" ? "Save session" : "End & save"}</Button></div> : <Button disabled={busy} onClick={begin}><Camera size={17}/> {busy ? "Preparing…" : "Enable camera"}</Button>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <small className="tracking-note">Highlighted: {targetText}. Camera counts are estimates; your therapist can review movement form. Video stays on this device.</small>
     </div>

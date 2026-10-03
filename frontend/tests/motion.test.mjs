@@ -118,6 +118,20 @@ test("leaving the target resets the required hold", () => {
   assert.equal(state.reps, 0);
 });
 
+test("a brief near-target wobble pauses the hold without losing the rep", () => {
+  let state = calibrated();
+  for (const [time, wrist] of [[1300, 12], [1600, 38], [1800, 29], [1900, 39], [2200, 39], [2400, 39], [2700, 0]]) state = advanceTracker(state, reading(wrist), time);
+  assert.equal(state.reps, 1);
+});
+
+test("a long session keeps tracking and limits the samples sent to the server", () => {
+  let state = calibrated();
+  for (let index = 0; index < 2500; index++) state = advanceTracker(state, reading(0), 1300 + index * 100);
+  assert.equal(state.phase, "ready");
+  assert.ok(state.samples.length <= 2400);
+  assert.equal(state.samples.at(-1).timeMs, 251200);
+});
+
 test("long prescribed holds can finish and counting stops at the target reps", () => {
   const longHold = { ...exercise, hold: 7, reps: 1 };
   let state = newTracker(longHold);
