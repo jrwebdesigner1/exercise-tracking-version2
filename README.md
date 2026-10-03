@@ -5,7 +5,7 @@ A therapist and patient exercise portal with a Next.js frontend and a FastAPI/Mo
 ## Run locally
 
 1. Start MongoDB locally or provide a MongoDB Atlas URI.
-2. Configure `backend/.env` with your MongoDB URI and database. The local file is ignored by Git. `APP_ENV=development` and `DEV_OPEN_ACCESS=true` allow the direct portal routes to work locally without a login page.
+2. Configure `backend/.env` with `MONGODB_URI`, including the database name in the URI path (for example, `mongodb://127.0.0.1:27017/chanre_care`). The local file is ignored by Git. `APP_ENV=development` and `DEV_OPEN_ACCESS=true` allow the direct portal routes to work locally without a login page.
 3. Install and start the backend:
 
    ```powershell

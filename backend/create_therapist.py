@@ -20,7 +20,7 @@ def main():
     if not uri:
         parser.error("MONGODB_URI must be set in backend/.env")
     client = MongoClient(uri, serverSelectionTimeoutMS=5000)
-    db = client[os.environ.get("MONGODB_DATABASE", "chanre_care")]
+    db = client.get_default_database(default="chanre_care")
     email_index = db.users.index_information().get("email_1")
     if email_index and not email_index.get("sparse"):
         db.users.drop_index("email_1")

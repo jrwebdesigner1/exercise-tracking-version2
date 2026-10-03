@@ -62,7 +62,10 @@ def person(doc):
 
 def create_app(db=None, secret=None, secure_cookie=None):
     jwt_secret = secret or os.getenv("JWT_SECRET", "")
-    mongo_db = db if db is not None else MongoClient(os.getenv("MONGODB_URI", "mongodb://127.0.0.1:27017"), serverSelectionTimeoutMS=3000)[os.getenv("MONGODB_DATABASE", "chanre_care")]
+    mongo_db = db if db is not None else MongoClient(
+        os.getenv("MONGODB_URI", "mongodb://127.0.0.1:27017/chanre_care"),
+        serverSelectionTimeoutMS=3000,
+    ).get_default_database(default="chanre_care")
     secure = secure_cookie if secure_cookie is not None else os.getenv("COOKIE_SECURE", "false").lower() == "true"
     frontend_origins = {origin.strip().rstrip("/") for origin in os.getenv("FRONTEND_ORIGIN", "http://localhost:3000").split(",") if origin.strip()}
     open_development = os.getenv("APP_ENV") == "development" and os.getenv("DEV_OPEN_ACCESS", "false").lower() == "true" and not secure

@@ -12,6 +12,18 @@ from backend.main import create_app
 SECRET = "test-secret-that-is-long-enough-for-hs256"
 
 
+def test_database_name_comes_from_mongodb_uri():
+    with patch.dict(os.environ, {"MONGODB_URI": "mongodb://127.0.0.1:27017/uri_database", "MONGODB_DATABASE": "ignored_database"}):
+        app = create_app(secret=SECRET)
+    assert app.state.db.name == "uri_database"
+
+
+def test_mongodb_uri_without_database_uses_local_default():
+    with patch.dict(os.environ, {"MONGODB_URI": "mongodb://127.0.0.1:27017/"}):
+        app = create_app(secret=SECRET)
+    assert app.state.db.name == "chanre_care"
+
+
 def client_with_therapists(open_access=False):
     db = mongomock.MongoClient().chanre_test
     for name, email in [("Therapist One", "one@example.com"), ("Therapist Two", "two@example.com")]:
