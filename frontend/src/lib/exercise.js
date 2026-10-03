@@ -13,13 +13,25 @@ export function rolesFor(region, side) {
   const sides = side === "Both" ? ["right", "left"] : [side.toLowerCase()];
   return Object.fromEntries(sides.flatMap(name => [[`${name}_${joint}`, "active"], [`${name}_${stable}`, "stable"]]));
 }
-export function movementReady(exercise) {
+export function movementIssues(exercise) {
   const active = Object.entries(exercise.roles).filter(([, role]) => role === "active").map(([joint]) => joint);
   const [start, target, end] = exercise.frames;
-  return Boolean(start && target && end && active.length && active.every(joint =>
-    joint in start.angles && joint in target.angles && joint in end.angles &&
-    Math.abs(target.angles[joint] - start.angles[joint]) >= 5 &&
-    Math.abs(end.angles[joint] - start.angles[joint]) <= 10
-  ));
+  const issues = [];
+  if (!active.length) return ["Choose at least one moving joint in Skeleton."];
+  if (!start) issues.push("Save the Start position.");
+  if (!target) issues.push("Save the Target position.");
+  if (!end) issues.push("Save the Return position.");
+  if (!start || !target || !end) return issues;
+  for (const joint of active) {
+    const name = label(joint);
+    if ([start, target, end].some(frame => !Number.isFinite(frame.angles?.[joint]))) {
+      issues.push(`Save ${name} in all three positions.`);
+    } else {
+      if (Math.abs(target.angles[joint] - start.angles[joint]) < 5) issues.push(`Move ${name} at least 5° away from Start in Target.`);
+      if (Math.abs(end.angles[joint] - start.angles[joint]) > 10) issues.push(`Bring ${name} within 10° of Start in Return.`);
+    }
+  }
+  return issues;
 }
+export const movementReady = exercise => movementIssues(exercise).length === 0;
 export const newExercise = () => ({ name: "", region: "Wrist / Hand", side: "Right", movementPlane: "frontal", reps: 10, hold: 1, camera: "Right side", instruction: "Follow the movement guide slowly and return to the start position.", roles: rolesFor("Wrist / Hand", "Right"), frames: [], rules: { tolerance: 8, stable: 8, minTime: 2, maxTime: 6, feedback: "Move a little further." }, version: 1, status: "Draft" });

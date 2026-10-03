@@ -29,6 +29,14 @@
 .model-card-status{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}.model-angle-readout{color:#55769c;font-size:11px;font-weight:600;white-space:nowrap}.model-angle-readout b{color:#176ce4;font-size:14px;margin-left:4px}
 .recipient-section{margin-top:22px;padding-top:18px;border-top:1px solid #e8eef7}.recipient-section h3{font-size:14px;margin:0 0 5px}.recipient-section p{font-size:12px;line-height:1.5;color:#7188a6;margin:0 0 12px}.recipient-list{display:grid;gap:7px;max-height:155px;overflow:auto}.recipient-option{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e2eaf4;border-radius:9px;font-size:13px;cursor:pointer}.recipient-option:has(input:checked){background:#eff6ff;border-color:#9bc5ff;color:#1d5eb8}.recipient-option input{accent-color:#2563eb}.recipient-section .recipient-help{color:#b45309;margin:10px 0 0}
 .studio-grid.movement-grid{grid-template-columns:280px minmax(0,1fr)}.movement-grid .studio-sidebar>.button{margin-top:12px}@media(max-width:900px){.studio-grid.movement-grid{grid-template-columns:minmax(220px,.45fr) minmax(0,1fr)}.movement-grid>.model-card{grid-column:auto;grid-row:auto}}@media(max-width:640px){.studio-grid.movement-grid{grid-template-columns:1fr}.movement-grid>.model-card{grid-row:1}}
+.position-validation{margin:12px 0;padding:10px 11px;border-radius:10px;border:1px solid #fbd5aa;background:#fff7ed;color:#8a4b13;font-size:11px;line-height:1.4}
+.position-validation.ready{border-color:#b8ead3;background:#edf9f2;color:#17694c}
+.position-validation strong{display:block;font-size:12px;margin-bottom:4px}
+.position-validation p{margin:3px 0}
+.position-comparison{display:grid;gap:7px;margin:12px 0 2px;padding:9px 0;border-top:1px solid #e5edf7}
+.position-comparison>div{display:flex;flex-wrap:wrap;gap:4px 8px;color:#6781a1;font-size:10px}
+.position-comparison strong{width:100%;color:#274469;font-size:11px}
+.wizard-save-error{margin:0 0 14px}
 
 /* Patient portal: clear reading widths and consistent spacing on laptop screens. */
 .patient-portal .app-content{max-width:1320px;padding:32px clamp(24px,3vw,44px) 56px}
