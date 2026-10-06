@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, Check, RotateCcw, Square, Target, MoveUp, ScanLine } from "lucide-react";
-import { advanceTracker, jointProgress, measurePose, newTracker, POSE_EDGES } from "@/lib/motion";
+import { advanceTracker, jointVisualState, measurePose, newTracker, POSE_EDGES } from "@/lib/motion";
 import { Button } from "./ui";
 import { label } from "@/lib/exercise";
 
@@ -11,15 +11,6 @@ const JOINT_POINTS = {
 };
 const FOCUS_POINTS = { shoulder: "elbow", elbow: "wrist", wrist: "wrist", hip: "knee", knee: "ankle", ankle: "ankle" };
 const pointVisible = point => point && Number.isFinite(point.x) && Number.isFinite(point.y) && (point.visibility ?? 1) >= .55;
-function backAtStart(exercise, angles, name) {
-  if (angles?.[name] == null) return false;
-  const start = exercise.frames[0]?.angles[name] ?? 0;
-  const end = exercise.frames[2]?.angles[name] ?? start;
-  const offset = end - start;
-  const limit = Math.abs(offset) < 1 ? Math.max(12, Math.min(15, exercise.rules.tolerance)) : Math.max(5, Math.min(12, exercise.rules.tolerance));
-  return Math.abs(angles[name] - offset) <= limit;
-}
-
 function drawPose(canvas, measurement, exercise, state) {
   if (!canvas) return;
   const context = canvas.getContext("2d");
@@ -32,7 +23,6 @@ function drawPose(canvas, measurement, exercise, state) {
   const jointRoles = exercise.roles || {};
   const active = Object.keys(jointRoles).filter(name => jointRoles[name] === "active");
   const stable = Object.keys(jointRoles).filter(name => jointRoles[name] === "stable");
-  const steady = stable.every(name => state.angles[name] != null && Math.abs(state.angles[name]) <= exercise.rules.stable);
   const circle = (point, radius, fill, stroke, strokeWidth = 2) => {
     context.beginPath();
     context.arc(point.x * width, point.y * height, radius * size, 0, Math.PI * 2);
@@ -60,7 +50,7 @@ function drawPose(canvas, measurement, exercise, state) {
   for (const index of shown) {
     if (pointVisible(points[index])) {
       circle(points[index], 11, "#102a43");
-      circle(points[index], 8, "#0bc96f", "#fff", 2.5);
+      circle(points[index], 8, "#cbd9e8", "#fff", 2.5);
     }
   }
   for (const name of stable) {
@@ -87,8 +77,8 @@ function drawPose(canvas, measurement, exercise, state) {
         point = hand[9];
       }
     }
-    const movement = jointProgress(exercise, state.angles, name);
-    const reached = state.trackingVisible && state.baseline && steady && (state.phase === "returning" ? backAtStart(exercise, state.angles, name) : state.phase === "target" && movement.atTarget);
+    const movement = jointVisualState(exercise, state, name);
+    const reached = movement.highlighted;
     circle(point, 27, "rgba(16, 42, 67, .35)", reached ? "#18cb7d" : "#3b93ff", 3);
     if (state.baseline && state.phase !== "paused") {
       context.beginPath();
@@ -121,7 +111,7 @@ export default function LiveTracking({ exercise, mutate, onDone }) {
   const [result, setResult] = useState(null);
   const activeJoints = Object.entries(exercise.roles).filter(([, role]) => role === "active").map(([name]) => name);
   const stableJoints = Object.entries(exercise.roles).filter(([, role]) => role === "stable").map(([name]) => name);
-  const movements = activeJoints.map(name => ({ ...jointProgress(exercise, snapshot.trackingVisible ? snapshot.angles : {}, name), atReturn: snapshot.trackingVisible && backAtStart(exercise, snapshot.angles, name) }));
+  const movements = activeJoints.map(name => jointVisualState(exercise, snapshot, name));
   const stableGood = snapshot.trackingVisible && stableJoints.every(name => snapshot.angles[name] != null && Math.abs(snapshot.angles[name]) <= exercise.rules.stable);
   const targetPhase = ["target", "returning"].includes(snapshot.phase);
   const inTarget = targetPhase && movements.length > 0 && stableGood && movements.every(movement => movement.atTarget);
@@ -266,7 +256,7 @@ export default function LiveTracking({ exercise, mutate, onDone }) {
       </div>
       {error && <p className="form-error tracking-mobile-error" role="alert">{error}</p>}
       {stage === "tracking" && <div className={`tracking-hold ${snapshot.phase === "target" || snapshot.phase === "returning" ? "active" : ""}`}><div><strong>{snapshot.phase === "returning" ? "Return to your start position" : snapshot.phase === "target" ? (holdMs ? "Hold near the target" : "Target reached") : snapshot.phase === "moving" ? "Move toward the target" : "Set your start position"}</strong><span>{snapshot.phase === "target" ? (holdMs ? `${Math.max(0, (holdMs - holdElapsedMs) / 1000).toFixed(1)}s remaining` : "Return to finish this rep") : snapshot.phase === "returning" ? "A rep counts when you return" : snapshot.phase === "moving" ? "Move gently until your target joints turn green" : "Hold still to calibrate, then move"}</span></div>{holdMs > 0 && <div className="tracking-hold-meter" role="progressbar" aria-label="Target hold" aria-valuenow={Math.round(holdPercent)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${holdPercent}%` }}/></div>}</div>}
-      {stage === "tracking" && snapshot.baseline && <div className="tracking-motion-guide" aria-label="Movement progress">{movements.map(movement => <div key={movement.name} className={`tracking-motion-joint ${snapshot.phase === "returning" ? movement.atReturn ? "reached" : "" : movement.atTarget ? "reached" : ""}`}><strong>{label(movement.name)}</strong><span>{snapshot.phase === "returning" ? movement.atReturn ? "At start" : "Return to start" : movement.atTarget ? "Target reached" : movement.progress == null ? "Finding joint" : `${Math.round(movement.progress)}° now`}</span><em>Target {Math.round(movement.lower)}°–{Math.round(movement.upper)}°</em><i><b style={{ width: `${snapshot.phase === "returning" ? movement.atReturn ? 100 : Math.max(0, 100 - movement.percent) : movement.percent}%` }}/></i></div>)}</div>}
+      {stage === "tracking" && snapshot.baseline && <div className="tracking-motion-guide" aria-label="Movement progress">{movements.map(movement => <div key={movement.name} className={`tracking-motion-joint ${movement.highlighted ? "reached" : ""}`}><strong>{label(movement.name)}</strong><span>{movement.atReturn ? "At start" : movement.atTarget ? "In target range" : snapshot.phase === "returning" ? "Return to start" : movement.progress == null ? "Finding joint" : `${Math.round(movement.progress)}° now`}</span><em>Target {Math.round(movement.lower)}°–{Math.round(movement.upper)}°</em><i><b style={{ width: `${snapshot.phase === "returning" ? movement.atReturn ? 100 : Math.max(0, 100 - movement.percent) : movement.percent}%` }}/></i></div>)}</div>}
       <div className="tracking-feedback-row"><div className={`tracking-feedback-card ${inTarget ? "success" : "action"}`}><span className="tracking-feedback-icon"><MoveUp size={19}/></span><div><strong>{snapshot.phase === "returning" ? "Return to start" : inTarget ? "Target reached" : snapshot.phase === "calibrating" ? "Align your body" : snapshot.phase === "paused" ? "Tracking needs attention" : "Follow the target"}</strong><span>{stage === "tracking" ? snapshot.message : "Enable the camera and stand in view."}</span></div></div><div className="tracking-feedback-card calm"><span className="tracking-feedback-icon"><Target size={19}/></span><div><strong>{stableJoints.length ? "Keep supporting joints steady" : "Move with control"}</strong><span>{stableJoints.length ? stableJoints.map(label).join(" · ") : exercise.instruction}</span></div></div></div>
     </div>
     <div className="tracking-panel">
@@ -275,10 +265,13 @@ export default function LiveTracking({ exercise, mutate, onDone }) {
       <div className={`tracking-status ${snapshot.phase === "paused" ? "paused" : ""}`}><i/><div><strong>{stage === "tracking" ? snapshot.phase === "calibrating" ? "Finding your position" : snapshot.phase === "paused" ? "Tracking paused" : snapshot.phase === "complete" ? "Exercise complete" : snapshot.phase === "target" ? "Hold position" : snapshot.phase === "returning" ? "Return to start" : "Tracking movement" : "Camera setup"}</strong><p>{stage === "tracking" ? snapshot.message : "Position yourself so the moving joints are visible."}</p></div></div>
       <div className="tracking-movements">{movements.map(movement => {
         const scale = Math.max(30, movement.upper + 15);
-        return <div className="tracking-target" key={movement.name}><div className="tracking-target-heading"><strong>{label(movement.name)}</strong><span className={targetPhase && movement.atTarget && stableGood ? "target-met" : ""}>{targetPhase && movement.atTarget && stableGood ? "In target" : movement.progress == null ? "Finding movement" : `${Math.round(movement.progress)}° toward target`}</span></div><div className="tracking-target-scale"><div className="tracking-target-green" style={{ left: `${movement.lower / scale * 100}%`, width: `${(movement.upper - movement.lower) / scale * 100}%` }}/>{movement.progress != null && <div className="tracking-target-marker" style={{ left: `${Math.max(0, Math.min(100, movement.progress / scale * 100))}%` }}/>}</div><div className="tracking-target-labels"><span>Start 0°</span><strong>Target {Math.round(movement.lower)}°–{Math.round(movement.upper)}°</strong></div></div>;
+        const pointInRange = movement.atTarget;
+        return <div className="tracking-target" key={movement.name}><div className="tracking-target-heading"><strong>{label(movement.name)}</strong><span className={pointInRange ? "target-met" : ""}>{pointInRange ? "In target range" : movement.progress == null ? "Finding movement" : `${Math.round(movement.progress)}° toward target`}</span></div><div className="tracking-target-scale"><div className="tracking-target-green" style={{ left: `${movement.lower / scale * 100}%`, width: `${(movement.upper - movement.lower) / scale * 100}%` }}/>{movement.progress != null && <div className={`tracking-target-marker ${pointInRange ? "target-met" : ""}`} style={{ left: `${Math.max(0, Math.min(100, movement.progress / scale * 100))}%` }}/>}</div><div className="tracking-target-labels"><span>Start 0°</span><strong>Target {Math.round(movement.lower)}°–{Math.round(movement.upper)}°</strong></div></div>;
       })}</div>
       <div className="tracking-progress"><div style={{ width: `${Math.min(100, snapshot.reps / exercise.reps * 100)}%` }}/></div>
-      <div className="tracking-points"><h3>{snapshot.phase === "returning" ? "Return points" : "Target points"}</h3>{movements.map(movement => <div key={movement.name} className="tracking-point-row"><i className={(snapshot.phase === "returning" ? movement.atReturn : targetPhase && movement.atTarget) && stableGood ? "stable" : "active"}/><div><strong>{label(movement.name)}</strong><span>{snapshot.phase === "returning" ? movement.atReturn ? "Back at start" : "Move back to your starting pose" : targetPhase && movement.atTarget && stableGood ? "Target reached" : "Move until this point turns green"}</span></div></div>)}{stableJoints.map(name => {
+      <div className="tracking-points"><h3>{snapshot.phase === "returning" ? "Return points" : "Target points"}</h3>{movements.map(movement => {
+        return <div key={movement.name} className="tracking-point-row"><i className={movement.highlighted ? "stable" : "active"}/><div><strong>{label(movement.name)}</strong><span>{movement.atReturn ? "Back at start" : movement.atTarget ? "In target range" : snapshot.phase === "returning" ? "Move back to your starting pose" : "Move until this point turns green"}</span></div></div>;
+      })}{stableJoints.map(name => {
         const steady = snapshot.trackingVisible && snapshot.angles[name] != null && Math.abs(snapshot.angles[name]) <= exercise.rules.stable;
         return <div key={name} className="tracking-point-row"><i className={steady ? "stable" : "active"}/><div><strong>{label(name)}</strong><span>{steady ? "Keeping steady" : "Keep steady while you move"}</span></div></div>;
       })}<div className="tracking-point-row"><i className={trackingGood ? "stable" : "active"}/><div><strong>Body position</strong><span>{trackingGood ? "Centered and in view" : "Stay centered and in view"}</span></div></div></div>

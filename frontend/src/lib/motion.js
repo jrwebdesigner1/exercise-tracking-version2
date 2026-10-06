@@ -128,6 +128,19 @@ export function jointProgress(exercise, angles, name) {
   };
 }
 
+export function jointVisualState(exercise, state, name) {
+  const tracked = Boolean(state.trackingVisible && state.baseline && state.phase !== "paused" && state.phase !== "calibrating");
+  const angles = tracked ? state.angles : {};
+  const movement = jointProgress(exercise, angles, name);
+  const start = exercise.frames[0]?.angles[name] ?? 0;
+  const end = exercise.frames[2]?.angles[name] ?? start;
+  const returnOffset = end - start;
+  const tolerance = exercise.rules.tolerance;
+  const returnLimit = Math.abs(returnOffset) < 1 ? Math.max(12, Math.min(15, tolerance)) : Math.max(5, Math.min(12, tolerance));
+  const atReturn = tracked && state.phase === "returning" && Math.abs(angles[name] - returnOffset) <= returnLimit;
+  return { ...movement, atReturn, highlighted: movement.atTarget || atReturn };
+}
+
 export function newTracker(exercise) {
   return {
     exercise, phase: "calibrating", reps: 0, baselineFrames: [], baseline: null,

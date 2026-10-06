@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { advanceTracker, jointProgress, measurePose, newTracker } from "../src/lib/motion.js";
+import { advanceTracker, jointProgress, jointVisualState, measurePose, newTracker } from "../src/lib/motion.js";
 
 const exercise = {
   roles: { right_wrist: "active", right_elbow: "stable" },
@@ -27,6 +27,25 @@ test("target progress uses the exercise's selected angle allowance", () => {
   const precise = { ...exercise, rules: { ...exercise.rules, tolerance: 5 } };
   assert.equal(jointProgress(precise, { right_wrist: 34 }, "right_wrist").atTarget, false);
   assert.equal(jointProgress(precise, { right_wrist: 35 }, "right_wrist").atTarget, true);
+});
+
+test("joint highlight follows the measured target through movement and tracking loss", () => {
+  const demo = { ...exercise, rules: { ...exercise.rules, tolerance: 10 } };
+  let state = newTracker(demo);
+  for (let index = 0; index < 12; index++) state = advanceTracker(state, reading(0), index * 100);
+  state = advanceTracker(state, reading(12), 1300);
+  assert.equal(jointVisualState(demo, state, "right_wrist").highlighted, false);
+  state = advanceTracker(state, reading(30), 1600);
+  assert.equal(state.phase, "target");
+  assert.equal(jointVisualState(demo, state, "right_wrist").highlighted, true);
+  state = advanceTracker(state, reading(30), 2100);
+  assert.equal(state.phase, "returning");
+  assert.equal(jointVisualState(demo, state, "right_wrist").highlighted, true);
+  assert.equal(jointVisualState(demo, { ...state, phase: "paused" }, "right_wrist").highlighted, false);
+  state = advanceTracker(state, reading(20), 2300);
+  assert.equal(jointVisualState(demo, state, "right_wrist").highlighted, false);
+  state = advanceTracker(state, { valid: false, reason: "Move into view." }, 2400);
+  assert.equal(jointVisualState(demo, state, "right_wrist").highlighted, false);
 });
 
 test("only a held target followed by a return counts", () => {
