@@ -178,6 +178,19 @@ def test_rep_requires_start_and_stays_within_target_range():
     assert analyze_session(exercise_payload(), overshoot)["reps"] == 0
 
 
+def test_saved_session_uses_selected_target_allowance():
+    from backend.motion import analyze_session
+    from backend.schemas import MotionSample
+
+    exercise = exercise_payload()
+    samples = [MotionSample(**{"timeMs": time, "angles": {"right_wrist": wrist, "right_elbow": 2}})
+               for time, wrist in [(0, 0), (300, 12), (700, 30), (1800, 30), (2200, 15), (3000, 0)]]
+    exercise["rules"]["tolerance"] = 10
+    assert analyze_session(exercise, samples)["reps"] == 1
+    exercise["rules"]["tolerance"] = 5
+    assert analyze_session(exercise, samples)["reps"] == 0
+
+
 def test_saved_session_respects_direction_and_uninterrupted_hold():
     from backend.motion import analyze_session
     from backend.schemas import MotionSample

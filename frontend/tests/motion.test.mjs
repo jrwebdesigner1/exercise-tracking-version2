@@ -20,6 +20,15 @@ function calibrated() {
   return state;
 }
 
+test("target progress uses the exercise's selected angle allowance", () => {
+  const demo = { ...exercise, rules: { ...exercise.rules, tolerance: 10 } };
+  assert.equal(jointProgress(demo, { right_wrist: 30 }, "right_wrist").atTarget, true);
+  assert.equal(jointProgress(demo, { right_wrist: 29 }, "right_wrist").atTarget, false);
+  const precise = { ...exercise, rules: { ...exercise.rules, tolerance: 5 } };
+  assert.equal(jointProgress(precise, { right_wrist: 34 }, "right_wrist").atTarget, false);
+  assert.equal(jointProgress(precise, { right_wrist: 35 }, "right_wrist").atTarget, true);
+});
+
 test("only a held target followed by a return counts", () => {
   let state = calibrated();
   for (const [time, wrist] of [[1300, 12], [1600, 38], [2100, 39], [2300, 21], [2600, 0]]) state = advanceTracker(state, reading(wrist), time);

@@ -34,4 +34,4 @@ export function movementIssues(exercise) {
   return issues;
 }
 export const movementReady = exercise => movementIssues(exercise).length === 0;
-export const newExercise = () => ({ name: "", region: "Wrist / Hand", side: "Right", movementPlane: "frontal", reps: 10, hold: 1, camera: "Right side", instruction: "Follow the movement guide slowly and return to the start position.", roles: rolesFor("Wrist / Hand", "Right"), frames: [], rules: { tolerance: 8, stable: 8, minTime: 2, maxTime: 6, feedback: "Move a little further." }, version: 1, status: "Draft" });
+export const newExercise = () => ({ name: "", region: "Wrist / Hand", side: "Right", movementPlane: "frontal", reps: 10, hold: 1, camera: "Right side", instruction: "Follow the movement guide slowly and return to the start position.", roles: rolesFor("Wrist / Hand", "Right"), frames: [], rules: { tolerance: 10, stable: 8, minTime: 2, maxTime: 6, feedback: "Move a little further." }, version: 1, status: "Draft" });

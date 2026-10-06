@@ -182,6 +182,9 @@
 .tracking-motion-joint>i{grid-column:1/-1;height:5px;border-radius:8px;background:#e8f0fa;overflow:hidden}
 .tracking-motion-joint>i b{display:block;height:100%;border-radius:8px;background:#ff9a28;transition:width .18s ease}
 .tracking-motion-joint.reached>i b{background:#19c579}
+.tracking-motion-joint>em{grid-column:1/-1;color:#126d50;font-size:12px;font-style:normal;font-weight:800}
+.tracking-motion-joint>span{font-size:13px;font-weight:700;color:#193b60}
+.summary-lines select{max-width:190px;min-height:36px;padding:0 10px;border:1px solid #c9dbef;border-radius:8px;background:#f7fbff;color:#1b4f86;font:inherit;font-weight:700}
 .tracking-feedback-card{display:flex;align-items:flex-start;gap:10px;min-width:0;padding:13px;border-radius:13px;background:#fff3ef;color:#b3411b}
 .tracking-feedback-card.calm{background:#eaf4ff;color:#176cb9}
 .tracking-feedback-card.success{background:#e8faf1;color:#087a4c}

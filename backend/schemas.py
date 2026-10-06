@@ -33,7 +33,7 @@ class Frame(BaseModel):
 
 
 class Rules(BaseModel):
-    tolerance: float = Field(default=8, ge=0, le=45)
+    tolerance: float = Field(default=10, ge=0, le=45)
     stable: float = Field(default=8, ge=0, le=45)
     minTime: float = Field(default=2, ge=0, le=60)
     maxTime: float = Field(default=6, gt=0, le=120)

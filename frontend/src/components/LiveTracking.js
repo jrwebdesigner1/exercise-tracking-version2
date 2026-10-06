@@ -28,7 +28,7 @@ function drawPose(canvas, measurement, exercise, state) {
   if (!points) return;
   const width = canvas.width;
   const height = canvas.height;
-  const size = Math.max(1, Math.min(width, height) / 720);
+  const size = Math.max(1.35, Math.min(width, height) / 720);
   const jointRoles = exercise.roles || {};
   const active = Object.keys(jointRoles).filter(name => jointRoles[name] === "active");
   const stable = Object.keys(jointRoles).filter(name => jointRoles[name] === "stable");
@@ -48,23 +48,27 @@ function drawPose(canvas, measurement, exercise, state) {
     context.moveTo(points[a].x * width, points[a].y * height);
     context.lineTo(points[b].x * width, points[b].y * height);
     context.strokeStyle = "rgba(9, 28, 58, .75)";
-    context.lineWidth = 7 * size;
+    context.lineWidth = 8 * size;
     context.lineCap = "round";
     context.stroke();
     context.strokeStyle = "rgba(224, 246, 255, .95)";
-    context.lineWidth = 3 * size;
+    context.lineWidth = 3.5 * size;
     context.stroke();
   }
 
   const shown = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
   for (const index of shown) {
-    if (pointVisible(points[index])) circle(points[index], 6, "#0bc96f", "#fff", 2.5);
+    if (pointVisible(points[index])) {
+      circle(points[index], 11, "#102a43");
+      circle(points[index], 8, "#0bc96f", "#fff", 2.5);
+    }
   }
   for (const name of stable) {
     const index = JOINT_POINTS[name];
     if (!pointVisible(points[index])) continue;
     const drifting = state.baseline && Math.abs(state.angles[name] || 0) > exercise.rules.stable;
-    circle(points[index], 9, drifting ? "#fb923c" : "#13c8b1", "#fff", 3);
+    circle(points[index], 15, "#102a43");
+    circle(points[index], 12, drifting ? "#fb923c" : "#13c8b1", "#fff", 3);
   }
   for (const name of active) {
     const [side, kind] = name.split("_");
@@ -84,18 +88,18 @@ function drawPose(canvas, measurement, exercise, state) {
       }
     }
     const movement = jointProgress(exercise, state.angles, name);
-    const reached = state.trackingVisible && state.baseline && steady && (state.phase === "returning" ? backAtStart(exercise, state.angles, name) : ["target", "ready"].includes(state.phase) && (state.phase === "ready" ? backAtStart(exercise, state.angles, name) : movement.atTarget));
-    circle(point, 21, "rgba(37, 99, 235, .12)", reached ? "#18cb7d" : "#3b93ff", 2);
+    const reached = state.trackingVisible && state.baseline && steady && (state.phase === "returning" ? backAtStart(exercise, state.angles, name) : state.phase === "target" && movement.atTarget);
+    circle(point, 27, "rgba(16, 42, 67, .35)", reached ? "#18cb7d" : "#3b93ff", 3);
     if (state.baseline && state.phase !== "paused") {
       context.beginPath();
-      context.arc(point.x * width, point.y * height, 21 * size, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * movement.percent / 100);
+      context.arc(point.x * width, point.y * height, 27 * size, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * movement.percent / 100);
       context.strokeStyle = reached ? "#18cb7d" : "#ff911c";
-      context.lineWidth = 5 * size;
+      context.lineWidth = 6 * size;
       context.lineCap = "round";
       context.stroke();
     }
-    circle(point, 13, "rgba(37, 99, 235, .18)", "#fff", 2);
-    circle(point, 7, reached ? "#18cb7d" : "#ff911c", "#fff", 2.5);
+    circle(point, 17, "rgba(16, 42, 67, .55)", "#fff", 2.5);
+    circle(point, 10, reached ? "#18cb7d" : "#ff911c", "#fff", 3);
   }
 }
 
@@ -262,7 +266,7 @@ export default function LiveTracking({ exercise, mutate, onDone }) {
       </div>
       {error && <p className="form-error tracking-mobile-error" role="alert">{error}</p>}
       {stage === "tracking" && <div className={`tracking-hold ${snapshot.phase === "target" || snapshot.phase === "returning" ? "active" : ""}`}><div><strong>{snapshot.phase === "returning" ? "Return to your start position" : snapshot.phase === "target" ? (holdMs ? "Hold near the target" : "Target reached") : snapshot.phase === "moving" ? "Move toward the target" : "Set your start position"}</strong><span>{snapshot.phase === "target" ? (holdMs ? `${Math.max(0, (holdMs - holdElapsedMs) / 1000).toFixed(1)}s remaining` : "Return to finish this rep") : snapshot.phase === "returning" ? "A rep counts when you return" : snapshot.phase === "moving" ? "Move gently until your target joints turn green" : "Hold still to calibrate, then move"}</span></div>{holdMs > 0 && <div className="tracking-hold-meter" role="progressbar" aria-label="Target hold" aria-valuenow={Math.round(holdPercent)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${holdPercent}%` }}/></div>}</div>}
-      {stage === "tracking" && snapshot.baseline && <div className="tracking-motion-guide" aria-label="Movement progress">{movements.map(movement => <div key={movement.name} className={`tracking-motion-joint ${snapshot.phase === "returning" ? movement.atReturn ? "reached" : "" : movement.atTarget ? "reached" : ""}`}><strong>{label(movement.name)}</strong><span>{snapshot.phase === "returning" ? movement.atReturn ? "At start" : "Return to start" : movement.atTarget ? "Target reached" : movement.progress == null ? "Finding joint" : `${Math.round(movement.progress)}° / ${Math.round(movement.goal)}°`}</span><i><b style={{ width: `${snapshot.phase === "returning" ? movement.atReturn ? 100 : Math.max(0, 100 - movement.percent) : movement.percent}%` }}/></i></div>)}</div>}
+      {stage === "tracking" && snapshot.baseline && <div className="tracking-motion-guide" aria-label="Movement progress">{movements.map(movement => <div key={movement.name} className={`tracking-motion-joint ${snapshot.phase === "returning" ? movement.atReturn ? "reached" : "" : movement.atTarget ? "reached" : ""}`}><strong>{label(movement.name)}</strong><span>{snapshot.phase === "returning" ? movement.atReturn ? "At start" : "Return to start" : movement.atTarget ? "Target reached" : movement.progress == null ? "Finding joint" : `${Math.round(movement.progress)}° now`}</span><em>Target {Math.round(movement.lower)}°–{Math.round(movement.upper)}°</em><i><b style={{ width: `${snapshot.phase === "returning" ? movement.atReturn ? 100 : Math.max(0, 100 - movement.percent) : movement.percent}%` }}/></i></div>)}</div>}
       <div className="tracking-feedback-row"><div className={`tracking-feedback-card ${inTarget ? "success" : "action"}`}><span className="tracking-feedback-icon"><MoveUp size={19}/></span><div><strong>{snapshot.phase === "returning" ? "Return to start" : inTarget ? "Target reached" : snapshot.phase === "calibrating" ? "Align your body" : snapshot.phase === "paused" ? "Tracking needs attention" : "Follow the target"}</strong><span>{stage === "tracking" ? snapshot.message : "Enable the camera and stand in view."}</span></div></div><div className="tracking-feedback-card calm"><span className="tracking-feedback-icon"><Target size={19}/></span><div><strong>{stableJoints.length ? "Keep supporting joints steady" : "Move with control"}</strong><span>{stableJoints.length ? stableJoints.map(label).join(" · ") : exercise.instruction}</span></div></div></div>
     </div>
     <div className="tracking-panel">
